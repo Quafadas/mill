@@ -25,9 +25,16 @@ trait DistModule extends RunModule {
   /** The plain assembly jar without any shell script prefix */
   def assemblyJar: T[PathRef]
 
-  /** The shell script to prepend to create a self-executing jar */
+  /**
+   * The script to prepend to create a self-executing jar.
+   * Uses a platform-specific script (pure batch on Windows, pure shell on Unix)
+   * to avoid the polyglot header pattern that can trigger antivirus false positives.
+   */
   def launcherScript: T[String] = Task {
-    Jvm.launcherUniversalScript(mainClass().get, Seq("$0"), Seq("%~dpnx0"), Nil)
+    if (scala.util.Properties.isWin)
+      Jvm.launcherCmdScript(mainClass().get, Seq("%~dpnx0"), Nil)
+    else
+      Jvm.launcherShellScript(mainClass().get, Seq("$0"), Nil)
   }
 
   /** Combines launcherScript + assemblyJar into a self-executing jar */

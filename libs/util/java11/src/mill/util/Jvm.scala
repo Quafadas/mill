@@ -533,6 +533,58 @@ object Jvm {
     )
   }
 
+  /**
+   * Generate a Unix-only shell script to launch the given main class.
+   * Unlike [[launcherUniversalScript]], this does not include any Windows batch
+   * commands, producing a clean shell script without the polyglot header that
+   * can trigger false-positive antivirus detections.
+   */
+  def launcherShellScript(
+      mainClass: String,
+      shellClassPath: Seq[String],
+      jvmArgs: os.Shellable,
+      shebang: Boolean = false,
+      shellJvmArgs: os.Shellable = Nil
+  ): String = {
+    val jvmArgsStr = (jvmArgs.value ++ shellJvmArgs.value).mkString(" ")
+    val classpathStr = shellClassPath.mkString(":")
+    val shebangLine = if (shebang) "#!/usr/bin/env sh\n" else ""
+    s"""${shebangLine}if [ -z "$$JAVA_HOME" ] ; then
+       |  JAVACMD="java"
+       |else
+       |  JAVACMD="$$JAVA_HOME/bin/java"
+       |fi
+       |
+       |exec "$$JAVACMD" $jvmArgsStr $$JAVA_OPTS -cp "$classpathStr" '$mainClass' "$$@"
+       |""".stripMargin
+  }
+
+  /**
+   * Generate a Windows-only batch script to launch the given main class.
+   * Unlike [[launcherUniversalScript]], this does not include any Unix shell
+   * commands, producing a clean batch file without the polyglot header that
+   * can trigger false-positive antivirus detections.
+   */
+  def launcherCmdScript(
+      mainClass: String,
+      cmdClassPath: Seq[String],
+      jvmArgs: os.Shellable,
+      cmdJvmArgs: os.Shellable = Nil
+  ): String = {
+    val jvmArgsStr = (jvmArgs.value ++ cmdJvmArgs.value).mkString(" ")
+    val classpathStr = cmdClassPath.mkString(";")
+    s"""@echo off\r
+       |setlocal EnableDelayedExpansion\r
+       |set "JAVACMD=java.exe"\r
+       |if not "%JAVA_HOME%"=="" set "JAVACMD=%JAVA_HOME%\\bin\\java.exe"\r
+       |\r
+       |"%JAVACMD%" $jvmArgsStr %JAVA_OPTS% -cp "$classpathStr" "$mainClass" %*\r
+       |\r
+       |endlocal\r
+       |exit /B %errorlevel%\r
+       |""".stripMargin
+  }
+
   def createLauncher(
       mainClass: String,
       classPath: Seq[os.Path],
